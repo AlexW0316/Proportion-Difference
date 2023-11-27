@@ -1,0 +1,195 @@
+---
+title: "Final Project"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE,
+                      warning = FALSE, error = TRUE,
+                      fig.height = 3)
+library(tidyverse)
+library(lubridate)
+source("../scripts/viridis.R")
+```
+
+```{r, include=FALSE}
+# Import the data
+employed_2010 = read_csv("../project/data/2010-revision.csv")
+
+# rename columns
+employed_2010 = employed_2010 %>%
+  rename(demo_chars = 'Characteristics',
+         total_employed = 'Total Employed',
+         onsite = 'Total Onsite Workers',
+         total_offsite = 'Total',
+         mixed = 'Number Mixed Workers',
+         home = 'Number Home Workers'
+         ) 
+
+# extract presence of children characteristics
+e_child = employed_2010 %>%
+  select(demo_chars, onsite, mixed, home) %>%
+  filter(str_detect(demo_chars, "Present|Not present")) %>%
+  mutate(onsite =  as.numeric(str_replace(onsite, ",", "")),
+         mixed =  as.numeric(str_replace(mixed, ",", "")),
+         home =  as.numeric(str_replace(home, ",", "")),
+         telework = mixed + home,
+         total = telework + onsite) %>%
+  select(-home, -mixed) %>%
+  pivot_longer(cols=2:3, names_to="work_type", values_to="population") %>%
+  mutate(pct = population / total) %>%
+  select(-total)
+```
+
+# Introduction
+
+Flexjobs reports that "62% of working parents say they would quit their current job if they can't continue remote work" [^1]. Is this preference observable before the pandemic when these work arrangements were less common? To find out, we will use 2010 National Census data to examine the impact of having a minor under 18 at home on the rate of onsite employees. To perform this inquiry we will ask is there evidence for a difference in the proportion of onsite employees among all employees between the presence and non-presence of children under 18? We will use z-tests to test which onsite employment proportion is higher, teleworkers with children or teleworkers without children.From analyzing our visuals, we predict that these proportions will be the same and the null hypothesis, H0: p1 = p2, will fail to be rejected.
+
+
+[^1]: Carter, C. M. (2021, April 29). Survey: Working Parents will quit without remote work. Forbes. Retrieved April 17, 2023, from <https://www.forbes.com/sites/christinecarter/2021/04/26/survey-working-parents-will-quit-without-remote-work/?sh=36bf9a874620>
+
+# Background
+
+This data was collected by the US Census Bureau [^2]. The US Census has an article detailing exactly how they collect their data. "Some data are collected from respondents directly (including businesses), through the censuses and surveys we conduct. We also collect additional data from other sources. Primary sources for additional data are federal, state, and local governments, as well as some commercial entities. These types of data are generally called"administrative data." [^3]. Each row shows the population (numbers in thousands) of civilians employed age 15 years and older for each characteristic such as, sex, age, race, parent, divorced, etc.
+
+[^2]: U.S. Census Bureau, Survey of Income and Program Participation, 2008 Panel, Wave 5 <https://www.census.gov/data/tables/2010/demo/commuting/p70-132.html>
+
+[^3]: [https://www.census.gov/about/what/admin-data.html#:\\\~:text=The%20Census%20Bureau%20uses%20data%20from%20a%20variety%20of%20sources.&text=Some%20data%20are%20collected%20from,additional%20data%20from%20other%20sources](https://www.census.gov/about/what/admin-data.html#:~:text=The%20Census%20Bureau%20uses%20data%20from%20a%20variety%20of%20sources.&text=Some%20data%20are%20collected%20from,additional%20data%20from%20other%20sources){.uri}
+
+Because of covid-19, a lot of people moved to "telework", or better known as working from home. This increase in popularity and usage made us interested. A lot of people advocate for work from home jobs, and want more of them available to us. We want to use this 2010 census study to see how this may impact jobs of those who have children and those who do not.
+
+We have a lot of variables. The primary extraction we did was whether employed people had the presence of someone under the age of 18 in their household. Anyone under 18 in the household was labeled: Child (note: we also use "Present", which means the person HAS a child (under 18) in their household.). We then used filters, and groups to determine if a person was working with a child present in their household. The original data separates the employed population into 3 types: onsite workers, mixed workers, and home workers. But since we focus on the difference between onsite and telework, we just combined the mixed and home workers together. We created a new column called telework to represent the total telework population. We grouped them in two categories; onsite, and telework. Onsite workers are defined as those who did not work a full workday at home as part of their work schedule. This category was called non-home workers in previous table packages. Mixed workers are defined as those who worked at home at least one full day a week, but also worked other days in a location outside of their home. Home workers are defined as those who worked exclusively at home (i.e., every day they worked, they worked at home [^4]
+
+[^4]: U.S. Census Bureau, Survey of Income and Program Participation, 2008 Panel, Wave 5 <https://www.census.gov/data/tables/2010/demo/commuting/p70-132.html>
+
+The one unusual factor is combining mixed workers and home workers together. This may cause some discrepancies and oddities. This is a decision we have made for consistency. Workers who are mixed are at least home some work days, rather than onsite every single day.  This is important because this means teleworkers now refers to all of those who are mixed.  Our interpretations of teleworkers will include some who go to onsite work jobs now. 
+
+We intend to build a statistical model to test our hypothesis using the variables and information mentioned above. We will ask if there is evidence for a difference in the proportion of onsite employees among all employees between the presence and non-presence of children under 18?
+
+# Analysis
+
+```{r, include=FALSE}
+# numerical summary
+e_child_1 = e_child %>%
+  group_by(demo_chars) %>%
+  mutate(total = sum(population))
+e_child_1
+```
+
+This table shows a numerical summary of the data. Because we concern about the difference between the proportion of onsite workers with and without the presence of children under 18, we show the proportion of two different work types within these two conditions. This proportion is calculated by population divided by the total number of workers in each group (numbers shown in the table are in thousands).
+
+```{r, echo=FALSE}
+# graph of population presence of child vs. work type
+ggplot(e_child, 
+       aes(x=demo_chars,
+           y=population,
+           fill = work_type)) +
+  geom_col(position = position_dodge(preserve = "single")) +
+  labs(x = "Presence of Child Under 18", y = "Population (Numbers In Thousands)", title = "Population of Different Work Types by Presence of Child")
+```
+
+This graph displays the numerical difference in a population's work location, either onsite or telework when having a child under 18 present or not present. It is very clear although the population without the presence of children under 18 is much larger than the population having children under 18, the proportion of onsite workers in each condition seems similar. Therefore, we decide to go a step further to make a graph comparing these proportions.
+
+```{r, echo=FALSE}
+# graph of proportion of population 
+ggplot(e_child, 
+       aes(x=demo_chars,
+           y=pct,
+           fill = work_type)) +
+  geom_col(position=position_fill(), width=0.5) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "Presence of Child Under 18", y = "Proportion", title = "Proportion of Population of Different Work Types by Presence of Child")
+```
+
+This graph shows the proportions of onsite and telework workers in each condition - with or without the presence of children under 18. It is clearly shows the proportion of onsite workers in each condition is around 90%. This means these proportions are similar and support our claim that the difference between these proportions is close to 0.
+
+## Hypothesis Tests for Testing Differences
+
+### Inference question
+
+> Is there evidence for a difference in the proportion of onsite employees among all employees between the presence and non-presence of children under 18?
+
+## Statistical Model
+
+1.  Construct a statistical model
+
+-  $X_1$ is the population of onsite workers among the total population of employees with children under 18 presence.
+-  $X_2$ is the population of onsite workers among the total population of employees without children under 18 presence.
+-   $p_1$ is the true population probability that an employee works onsite when they have a child under 18.
+-   $p_2$ is the true population probability that an employee works onsite when they don't have a child under 18. $$X_1|p_1 \sim Binomial(49753000, p_1)$$ $$X_2|p_2 \sim Binomial(91893000, p_2)$$
+
+2.  State hypothesis 
+
+-   $\hat{p_1}$ is the proportion of employee works onsite with a child under 18 present.
+-   $\hat{p_2}$ is the proportion of employee works onsite without a child under 18 present.
+
+$$H_0: \hat{p_1} = \hat{p_2}$$ $$H_a: \hat{p_1} \ne \hat{p_2}$$
+
+-   The null hypothesis is there is no difference in proportion of onsite workers whether or not children under 18 are present.
+-   The alternative hypothesis is that there is a difference.
+
+3.  Test statistic
+
+-   Our test statistic is that $\frac{\hat{p_1}-\hat{p_2}}{SE}$
+
+4.  Sample distribution
+
+-   Since both sample sizes are larger enough, then the sampling distribution of the difference is approximately normal.
+    -   $n_1 = 497530000$, $n_2 = 91893000$
+-   If the null hypothesis is true, then $\frac{\hat{p_1}-\hat{p_2}}{SE} \sim Normal(0,1)$
+
+5.  Calculate p-value
+
+-   If the null hypothesis is true, our estimate of the common value for $p_1$ and $p_2$ is $\bar{p} = 0.9054$
+-   If the alternative hypothesis is true, we expect a p-value to be less than 0.05.
+
+```{r, echo = FALSE}
+# get all the values we need
+x1 = e_child_1 %>% 
+  filter(demo_chars == "Present" & work_type == "onsite") %>%
+  pull(population) * 1000
+x2 = e_child_1 %>% 
+  filter(demo_chars == "Not present" & work_type == "onsite") %>%
+  pull(population) * 1000
+n1 = e_child_1 %>% 
+  filter(demo_chars == "Present" & work_type == "onsite") %>%
+  pull(total) * 1000
+n2 = e_child_1 %>% 
+  filter(demo_chars == "Not present" & work_type == "onsite") %>%
+  pull(total) * 1000
+
+# calculating phat1 and phat2
+phat_present = x1 / n1
+phat_notpresent = x2 / n2
+pbar = (x1 + x2) / (n1 + n2)
+
+# standard Error
+se = sqrt(pbar*(1-pbar) / n1 + pbar*(1-pbar) / n2)
+
+# test statistic 
+X = (phat_present - phat_notpresent) / se
+
+# confidence Interval 
+ci = phat_present - phat_notpresent + c(-1,1)*1.96*se
+
+# z Statistic 
+z = X / se
+
+# p-value
+pvalue = 2*pnorm(-abs(z))
+pvalue
+```
+
+-   By calculation, we have the p-value close to 0 and since it is too small, the result shows 0 in the result.
+
+# Discussion
+
+Our results show that there is significant evidence to suggest that the proportion of those working onsite with children is different to the proportion of those working onsite without children. Our findings (p = .0001, two-sided binomial test) indicate that the results are highly statistically significant. Overall there is strong evidence that there is significant influence towards having children or not having children when deciding work arrangements.This bias could be because of the commitments one would have to make towards working onsite that may be harder to commit to with children. 
+
+We found that there are significant differences in the proportion of employees that work onsite with children VS without children. This proposes that workplaces do not have a general balance between these two populations . However, the analysis does have potential shortcomings like for example sample bias, lack of the time factor, or discussion of occupation types. These conclusions are important because they can help make future decisions based on types of work like for example if an employer is deciding to create policies that allows employees more flexibility to work at home then the employer may need to concern themselves with deciding based on the factor of children in the household because the policy implemented would affect those with or without children differently. So, companies can make decisions by factoring in the status of children in households and make decisions based on other outstanding factors. 
+
+One possible shortcoming of the analysis could be the lack of the inclusion of time factor when selecting the sample because in the years following our sample there may have been a lot of change that might have occurred because the following years there were a lot of changes to society and technology that affected family structures, economics, and ways of living.  Another limitation in our analysis is the lack of demographic awareness in the sample data. Belonging to different communities within race, gender, socioeconomic standing, and age will most likely have an effect on whether one even has the capabilities or privileges to have leeway in their decision making process. Furthermore, another  limitation is sample bias due to the size of the sample because the sample size is not guaranteed to be uniform across ethnicities, age groups, or regional locations. Another shortcoming could be the location or type of work that our individuals in the sample take part in. Some occupations may allow individuals to have less freedom to decide their form of work and some may have more freedom to choose how they want to work. 
+
+For the potential future directions, we came up with some new questions. How would the pandemic affect these results? Are there differences in the proportion of working onsite VS offsite with the presence of children between different races, ages, and socioeconomic levels of individuals? Do specific industries create a bias in the decisions of work form? Does full time VS part time work affect decision making? Additionally, the potential different methods to address the same questions are interviews, data collection over a period of time, and cases to separate different occupations. To refine the understanding you need to include more data that is aware of demographic differences in population  including race, socioeconomic standing, gender, and age, in a sense this removes the sample bias. I believe it is also important to have distinctions in the type of work industry we are analyzing as some occupations allow for more or less flexibility than others. It would also be helpful to look at the occupations that offer more or less child support since that may offer daycare will result in a workforce more capable of choosing on site work and vice versa. Some more data that may refine our understanding is noticing the differences in the employment time necessary for those we sample since needing to work a full time job VS a part time job could affect one's decisions of their form of work.
+
+# Reference

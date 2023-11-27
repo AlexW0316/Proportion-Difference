@@ -1,0 +1,112 @@
+---
+title: "Final Project_proposal"
+output: html_document
+date: "2023-04-07"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE,
+                      warning = FALSE, error = TRUE,
+                      fig.height = 3)
+library(tidyverse)
+library(lubridate)
+source("../scripts/viridis.R")
+```
+
+## Team Members
+
+Nicole Hoffmann, Ziyi Wang, Malak Abdalla, Noah Avery
+
+## Plans of Group Meeting
+
+We will meet after 7 pm on Tuesdays or Thursdays in person. For the platform, we have a google drive set up to share documents and other materials for the project and a Messages group for chatting.
+
+## Question of Interest
+
+We will analyze the demographic characteristics of teleworkers, mixed and in-person workers. We will determine which characteristics predict that a person will have a work-from-home arrangement based on their demographic.
+
+## Descrption of Data
+
+This data was collected by the US Census Bureau. This organization collects data either through surveys or interviews. The key variables in this data set are total workers, onsite workers, and work-from-home, divided into mixed workers and home workers. This data quantifies the population we are trying to measure and variables that will help predict if an individual is more likely to work from home or onsite. The larger population is the United States.
+
+## Sourse of Data
+
+<https://www.census.gov/data/tables/2010/demo/commuting/p70-132.html>
+
+## Brief Analysis of Data With Graphs
+
+The variables that will be used will be income and type of work, onsite versus telework and we will create scatter plots that measure the number of people that are onsite and those that are not VS that specific income level.
+
+```{r, echo=FALSE}
+# Import the data
+employed_2010 = read_csv("../project/data/2010-revision.csv")
+```
+
+```{r, echo=FALSE}
+# data cleansing
+employed_2010 = employed_2010 %>%
+  rename(demo_chars = 'Characteristics',
+         total_employed = 'Total Employed',
+         onsite = 'Total Onsite Workers',
+         total_offsite = 'Total',
+         mixed = 'Number Mixed Workers',
+         home = 'Number Home Workers'
+         ) 
+
+```
+
+```{r, echo=FALSE}
+
+# extract presence of children characteristics
+e_child = employed_2010 %>%
+  select(demo_chars, onsite, mixed, home) %>%
+  filter(str_detect(demo_chars, "Present|Not present")) %>%
+  mutate(onsite =  as.numeric(str_replace(onsite, ",", "")),
+         mixed =  as.numeric(str_replace(mixed, ",", "")),
+         home =  as.numeric(str_replace(home, ",", "")),
+         telework = mixed + home,
+         total = telework + onsite) %>%
+  select(-home, -mixed) %>%
+  pivot_longer(cols=2:3, names_to="work_type", values_to="population") %>%
+  mutate(pct = population / total) %>%
+  select(-total)
+```
+
+```{r, echo=FALSE}
+# graph of population presence of child vs. work type
+ggplot(e_child, 
+       aes(x=demo_chars,
+           y=population,
+           fill = work_type)) +
+  geom_col(position = position_dodge(preserve = "single")) +
+  labs(x = "Presence of Child Under 18", y = "Population (Numbers In Thousands)", title = "Population of Different Work Types by Presence of Child")
+
+# graph of proportion of population 
+ggplot(e_child, 
+       aes(x=demo_chars,
+           y=pct,
+           fill = work_type)) +
+  geom_col(position=position_fill(), width=0.5) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "Presence of Child Under 18", y = "Proportion", title = "Proportion of Population of Different Work Types by Presence of Child")
+  
+```
+
+```{r}
+phat_present = 83414 / 91893
+n_present = 91893000
+phat_notpresent = 44830 / 49752
+n_notpresent = 49752000
+
+pbar = (83414+44830) / (91893+49752)
+
+# p_value
+se_p = sqrt(pbar*(1-pbar)/n_present + pbar*(1-pbar)/n_notpresent)
+z=(phat_present - phat_notpresent)/se_p
+pvalue_z = 2*pnorm(-abs(z))
+round(pvalue_z, 100)
+```
+
+## Description of A Possible Model For The Data And Associated Methods of Inference Or Prediction
+
+A possible model for analysis would be a regression model with dummy variables for all characteristics and use proportions of individuals to predict an outcome of onsite or telework. These proportions can also be used to simulate a random binomial distribution to predict the true mean of these different populations. With telework being a "success" and onsite work being a "failure".
